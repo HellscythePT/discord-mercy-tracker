@@ -414,7 +414,7 @@ class ResetConfirmView(discord.ui.View):
             item.disabled = True
 
 # Get bot token from environment variable for security
-bot_token = os.getenv("DISCORD_BOT_TOKEN")
+bot_token = os.getenv("DISCORD_TOKEN") or os.getenv("DISCORD_BOT_TOKEN")
 
 if not bot_token:
     logger.error("DISCORD_BOT_TOKEN environment variable not found!")
