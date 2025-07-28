@@ -89,6 +89,17 @@ def get_rarity_emoji(rarity):
     }
     return rarity_emojis.get(rarity.lower(), "⚫")
 
+def get_shard_emoji(shard_type):
+    """Get emoji for different shard types"""
+    shard_emojis = {
+        "ancient": "🔵",
+        "void": "🟣",
+        "sacred": "🟡",
+        "primal": "🔴",
+        "remnant": "⚫"
+    }
+    return shard_emojis.get(shard_type.lower(), "🔘")
+
 def format_shard_type(shard_type):
     """Format shard type with proper capitalization"""
     return shard_type.title()
