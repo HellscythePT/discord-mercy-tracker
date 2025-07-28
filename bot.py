@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+from pathlib import Path
+
+load_dotenv(dotenv_path=Path('.') / '.env')
+
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -7,7 +12,7 @@ import os
 from datetime import datetime
 from mercy_tracker import update_tracker, get_status, get_mercy_rules_info, validate_shard_type
 from backup_manager import backup_data, restore_data
-from utils import format_progress_bar, validate_amount
+from utils import format_progress_bar, validate_amount, get_shard_emoji
 from config import VALID_SHARD_TYPES, MAX_AMOUNT_PER_COMMAND
 
 # Configure logging
@@ -124,14 +129,15 @@ async def open_shards(interaction: discord.Interaction, shard_type: str, amount:
         save_data(user_data)
         
         # Create response embed
+        emoji = get_shard_emoji(shard_type)
         embed = discord.Embed(
             title="✅ Summons Updated",
             color=0x00ff00,
             timestamp=datetime.utcnow()
         )
         embed.add_field(
-            name=f"{shard_type.title()} Shards",
-            value=f"Added: **{amount}**\nPrevious: **{old_count}**\nTotal: **{new_count}**",
+            name=f"{emoji} {shard_type.title()} Shards",
+            value=f"Added: **{amount}**\nTotal: **{new_count}**",
             inline=False
         )
         embed.set_footer(text=f"User: {interaction.user.display_name}")
@@ -206,15 +212,16 @@ async def reset(interaction: discord.Interaction, shard_type: str = None):
         
         # Create confirmation embed
         if shard_type:
+            emoji = get_shard_emoji(shard_type)
             embed = discord.Embed(
                 title="⚠️ Confirm Individual Reset",
-                description=f"Are you sure you want to reset your **{shard_type.title()}** shard data? This action cannot be undone.",
+                description=f"Are you sure you want to reset your {emoji} **{shard_type.title()}** shard data? This action cannot be undone.",
                 color=0xff6600
             )
             current_count = user_data[user_id].get(shard_type.lower(), 0)
             embed.add_field(
                 name="Current Data",
-                value=f"{shard_type.title()}: {current_count}",
+                value=f"{emoji} {shard_type.title()}: {current_count}",
                 inline=False
             )
         else:
@@ -414,7 +421,7 @@ class ResetConfirmView(discord.ui.View):
             item.disabled = True
 
 # Get bot token from environment variable for security
-bot_token = os.getenv("DISCORD_TOKEN") or os.getenv("DISCORD_BOT_TOKEN")
+bot_token = os.getenv("DISCORD_BOT_TOKEN")
 
 if not bot_token:
     logger.error("DISCORD_BOT_TOKEN environment variable not found!")
