@@ -3,6 +3,10 @@ from pathlib import Path
 
 load_dotenv(dotenv_path=Path('.') / '.env')
 
+# Keep the bot alive using Flask
+from keep_alive import keep_alive
+keep_alive()
+
 import discord
 from discord.ext import commands
 from discord import app_commands
