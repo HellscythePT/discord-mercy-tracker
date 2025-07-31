@@ -298,7 +298,8 @@ class ResetPrimalRarityView(discord.ui.View):
 
         embed = discord.Embed(
             title="⚠️ Confirm Reset",
-        self.user_id = user_id
+            description="You're about to reset the following:",
+            color=0xff6600
         )
 
     @discord.ui.button(label="Legendary", style=discord.ButtonStyle.primary)
@@ -335,6 +336,57 @@ class ResetPrimalRarityView(discord.ui.View):
             embed.add_field(name=f"{emoji} Primal {label}", value=f"Current: {user_data[str(self.user_id)].get(shard_key, 0)}")
 
         await interaction.response.edit_message(embed=embed, view=view)
+
+class ResetConfirmView(discord.ui.View):
+    def __init__(self, user_id: str, user_data: dict, shard_type: str):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+        self.user_data = user_data
+        self.shard_type = shard_type
+
+    @discord.ui.button(label="✅ Confirm Reset", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != self.user_id:
+            await interaction.response.send_message("❌ This is not your reset request.", ephemeral=True)
+            return
+
+        if self.shard_type is None:
+            # Reset both Primal Legendary and Mythical
+            self.user_data[self.user_id]["primal_legendary"] = 0
+            self.user_data[self.user_id]["primal_mythical"] = 0
+        else:
+            self.user_data[self.user_id][self.shard_type] = 0
+
+        save_data(self.user_data)
+
+        embed = discord.Embed(
+            title="✅ Data Reset",
+            description="Selected mercy tracker data has been reset.",
+            color=0x00ff00
+        )
+
+        for item in self.children:
+            item.disabled = True
+
+        await interaction.response.edit_message(embed=embed, view=self)
+        logger.info(f"User {self.user_id} reset data for {self.shard_type}")
+
+    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != self.user_id:
+            await interaction.response.send_message("❌ Not your request.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="❌ Reset Cancelled",
+            description="Your data remains unchanged.",
+            color=0x808080
+        )
+
+        for item in self.children:
+            item.disabled = True
+
+        await interaction.response.edit_message(embed=embed, view=self)
 
 # This ResetConfirmView you already have, it handles confirming or canceling the reset.
 
