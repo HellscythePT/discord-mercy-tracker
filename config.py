@@ -1,10 +1,10 @@
 """Configuration settings for the Mercy Tracker Bot"""
 
 # Valid shard types supported by the bot
-VALID_SHARD_TYPES = ["ancient", "void", "sacred", "primal", "remnant"]
+VALID_SHARD_TYPES = ["ancient", "void", "sacred", "primal", "primal_legendary", "primal_mythical", "remnant"]
 
 # Maximum amount that can be added in a single command
-MAX_AMOUNT_PER_COMMAND = 1000
+MAX_AMOUNT_PER_COMMAND = 500
 
 # Minimum amount that can be added in a single command
 MIN_AMOUNT_PER_COMMAND = 1

@@ -37,7 +37,6 @@ tree = bot.tree
 DATA_FILE = "user_data.json"
 
 def load_data():
-    """Load user data from JSON file with error handling"""
     try:
         with open(DATA_FILE, "r") as f:
             data = json.load(f)
@@ -48,22 +47,18 @@ def load_data():
         return {}
     except json.JSONDecodeError as e:
         logger.error(f"Error decoding JSON data: {e}")
-        # Try to restore from backup
-        backup_data = restore_data()
-        if backup_data:
+        backup_data_restored = restore_data()
+        if backup_data_restored:
             logger.info("Restored data from backup")
-            return backup_data
+            return backup_data_restored
         return {}
     except Exception as e:
         logger.error(f"Unexpected error loading data: {e}")
         return {}
 
 def save_data(data):
-    """Save user data to JSON file with backup"""
     try:
-        # Create backup before saving
         backup_data(data)
-        
         with open(DATA_FILE, "w") as f:
             json.dump(data, f, indent=4)
         logger.info(f"Saved data for {len(data)} users")
@@ -75,7 +70,6 @@ user_data = load_data()
 
 @bot.event
 async def on_ready():
-    """Bot startup event"""
     print(f"Logged in as {bot.user}")
     logger.info(f"Bot {bot.user} is ready")
     try:
@@ -88,87 +82,349 @@ async def on_ready():
 
 @bot.event
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    """Global error handler for slash commands"""
     logger.error(f"Command error in {interaction.command.name}: {error}")
-    
     if interaction.response.is_done():
         await interaction.followup.send("An error occurred while processing your command.", ephemeral=True)
     else:
         await interaction.response.send_message("An error occurred while processing your command.", ephemeral=True)
 
-@tree.command(name="open", description="Register how many shards you opened")
-@app_commands.describe(
-    shard_type="Type of shard (ancient, void, sacred, primal, remnant)",
-    amount="How many did you open? (1-1000)"
-)
-async def open_shards(interaction: discord.Interaction, shard_type: str, amount: int):
-    """Handle shard opening registration"""
-    try:
-        # Validate inputs
-        if not validate_shard_type(shard_type.lower()):
-            valid_types = ", ".join(VALID_SHARD_TYPES)
-            await interaction.response.send_message(
-                f"❌ Invalid shard type '{shard_type}'. Valid types are: {valid_types}", 
-                ephemeral=True
-            )
+# ----------- OPEN SHARD FLOW -----------
+
+@tree.command(name="open_shard", description="Choose the shard type")
+async def open_shard(interaction: discord.Interaction):
+    view = ShardSelectFirstView(interaction.user.id)
+    await interaction.response.send_message(
+        content="Choose the shard type you opened:", view=view, ephemeral=True
+    )
+
+class ShardSelectFirstView(discord.ui.View):
+    def __init__(self, user_id: int):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+
+    @discord.ui.button(label="Ancient", style=discord.ButtonStyle.primary)
+    async def ancient(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.ask_amount(interaction, "ancient")
+
+    @discord.ui.button(label="Void", style=discord.ButtonStyle.primary)
+    async def void(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.ask_amount(interaction, "void")
+
+    @discord.ui.button(label="Sacred", style=discord.ButtonStyle.primary)
+    async def sacred(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.ask_amount(interaction, "sacred")
+
+    @discord.ui.button(label="Primal", style=discord.ButtonStyle.danger)
+    async def primal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ This isn't your selection.", ephemeral=True)
             return
-        
+        await interaction.response.edit_message(
+            content="Choose an option for Primal shard:", view=PrimalRarityAmountView(self.user_id)
+        )
+
+    @discord.ui.button(label="Remnant", style=discord.ButtonStyle.secondary)
+    async def remnant(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.ask_amount(interaction, "remnant")
+
+    async def ask_amount(self, interaction: discord.Interaction, shard_type: str):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ This isn't your selection.", ephemeral=True)
+            return
+        await interaction.response.send_modal(OpenShardAmountModal(self.user_id, [shard_type]))
+
+class PrimalRarityAmountView(discord.ui.View):
+    def __init__(self, user_id: int):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+
+    @discord.ui.button(label="Legendary", style=discord.ButtonStyle.primary)
+    async def legendary(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.open_modal(interaction, ["primal_legendary"])
+
+    @discord.ui.button(label="Mythical", style=discord.ButtonStyle.primary)
+    async def mythical(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.open_modal(interaction, ["primal_mythical"])
+
+    @discord.ui.button(label="Both", style=discord.ButtonStyle.success)
+    async def both(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.open_modal(interaction, ["primal_legendary", "primal_mythical"])
+
+    async def open_modal(self, interaction: discord.Interaction, keys: list):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ This isn't your selection.", ephemeral=True)
+            return
+        await interaction.response.send_modal(OpenShardAmountModal(self.user_id, keys))
+
+class OpenShardAmountModal(discord.ui.Modal, title="Enter Amount"):
+    def __init__(self, user_id: int, keys: list):
+        super().__init__()
+        self.user_id = user_id
+        self.keys = keys
+
+        self.amount_input = discord.ui.TextInput(
+            label="How many shards did you open?",
+            placeholder="e.g. 10",
+            min_length=1,
+            max_length=4
+        )
+        self.add_item(self.amount_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ You cannot submit this form.", ephemeral=True)
+            return
+        try:
+            amount = int(self.amount_input.value)
+        except ValueError:
+            await interaction.response.send_message("❌ Please enter a valid number.", ephemeral=True)
+            return
         if not validate_amount(amount):
             await interaction.response.send_message(
-                f"❌ Invalid amount. Please enter a number between 1 and {MAX_AMOUNT_PER_COMMAND}.", 
+                f"❌ Invalid amount. Must be between 1 and {MAX_AMOUNT_PER_COMMAND}.",
                 ephemeral=True
             )
             return
-        
-        user_id = str(interaction.user.id)
-        if user_id not in user_data:
-            user_data[user_id] = {}
-        
-        # Update tracker
-        old_count = user_data[user_id].get(shard_type.lower(), 0)
-        update_tracker(user_data[user_id], shard_type.lower(), amount)
-        new_count = user_data[user_id][shard_type.lower()]
-        
-        # Save data
+
+        user_id_str = str(self.user_id)
+        if user_id_str not in user_data:
+            user_data[user_id_str] = {}
+
+        result_lines = []
+        for key in self.keys:
+            update_tracker(user_data[user_id_str], key, amount)
+            new_total = user_data[user_id_str][key]
+            label = key.replace("primal_", "").title() if "primal" in key else key.title()
+            emoji = get_shard_emoji(key)
+            result_lines.append(f"{emoji} {label}: +{amount} (Total: {new_total})")
+
         save_data(user_data)
-        
-        # Create response embed
-        emoji = get_shard_emoji(shard_type)
+
         embed = discord.Embed(
-            title="✅ Summons Updated",
+            title="✅ Shard Update Complete",
+            description="\n".join(result_lines),
             color=0x00ff00,
             timestamp=datetime.utcnow()
         )
-        embed.add_field(
-            name=f"{emoji} {shard_type.title()} Shards",
-            value=f"Added: **{amount}**\nTotal: **{new_count}**",
-            inline=False
-        )
         embed.set_footer(text=f"User: {interaction.user.display_name}")
-        
-        await interaction.response.send_message(embed=embed)
-        logger.info(f"User {interaction.user.id} updated {shard_type} by {amount}")
-        
-    except Exception as e:
-        logger.error(f"Error in open command: {e}")
-        await interaction.response.send_message("❌ An error occurred while updating your summons.", ephemeral=True)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# ----------- RESET SHARD FLOW -----------
+
+@tree.command(name="reset_shard", description="Reset your mercy tracker using buttons")
+async def reset_shard(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+
+    if user_id not in user_data or not user_data[user_id]:
+        await interaction.response.send_message("❌ You have no data to reset.", ephemeral=True)
+        return
+
+    view = ResetShardTypeView(interaction.user.id)
+    await interaction.response.send_message(
+        content="What do you want to reset?", view=view, ephemeral=True
+    )
+
+class ResetShardTypeView(discord.ui.View):
+    def __init__(self, user_id: int):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+
+    @discord.ui.button(label="Ancient", style=discord.ButtonStyle.primary)
+    async def ancient(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.confirm(interaction, "ancient")
+
+    @discord.ui.button(label="Void", style=discord.ButtonStyle.primary)
+    async def void(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.confirm(interaction, "void")
+
+    @discord.ui.button(label="Sacred", style=discord.ButtonStyle.primary)
+    async def sacred(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.confirm(interaction, "sacred")
+
+    @discord.ui.button(label="Primal", style=discord.ButtonStyle.danger)
+    async def primal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Not your selection.", ephemeral=True)
+            return
+
+        await interaction.response.edit_message(
+            content="Choose which Primal mercy to reset:",
+            view=ResetPrimalRarityView(self.user_id)
+        )
+
+    @discord.ui.button(label="Remnant", style=discord.ButtonStyle.secondary)
+    async def remnant(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.confirm(interaction, "remnant")
+
+    async def confirm(self, interaction: discord.Interaction, shard_key: str):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Not your selection.", ephemeral=True)
+            return
+
+        view = ResetConfirmView(user_id=str(self.user_id), user_data=user_data, shard_type=shard_key)
+        current = user_data[str(self.user_id)].get(shard_key, 0)
+
+        embed = discord.Embed(
+            title="⚠️ Confirm Reset",
+            description=f"Reset **{shard_key.title()}** data?\nCurrent: **{current}**",
+            color=0xff6600
+        )
+        await interaction.response.edit_message(embed=embed, view=view)
+
+class ResetPrimalRarityView(discord.ui.View):
+    def __init__(self, user_id: int):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+
+    @discord.ui.button(label="Legendary", style=discord.ButtonStyle.primary)
+    async def legendary(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.confirm(interaction, "primal_legendary")
+
+    @discord.ui.button(label="Mythical", style=discord.ButtonStyle.primary)
+    async def mythical(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.confirm(interaction, "primal_mythical")
+
+    @discord.ui.button(label="Ambos", style=discord.ButtonStyle.success)
+    async def both(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.confirm(interaction, None)  # Reset both
+
+    async def confirm(self, interaction: discord.Interaction, shard_key: str):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Not your selection.", ephemeral=True)
+            return
+
+        view = ResetConfirmView(user_id=str(self.user_id), user_data=user_data, shard_type=shard_key)
+
+        embed = discord.Embed(
+            title="⚠️ Confirm Reset",
+        self.user_id = user_id
+        )
+
+    @discord.ui.button(label="Legendary", style=discord.ButtonStyle.primary)
+    async def legendary(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.confirm(interaction, "primal_legendary")
+
+    @discord.ui.button(label="Mythical", style=discord.ButtonStyle.primary)
+    async def mythical(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.confirm(interaction, "primal_mythical")
+
+    @discord.ui.button(label="Both", style=discord.ButtonStyle.success)
+    async def both(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.confirm(interaction, None)  # Reset both
+
+    async def confirm(self, interaction: discord.Interaction, shard_key: str):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Not your selection.", ephemeral=True)
+            return
+
+        view = ResetConfirmView(user_id=str(self.user_id), user_data=user_data, shard_type=shard_key)
+
+        embed = discord.Embed(
+            title="⚠️ Confirm Reset",
+            description="You're about to reset the following:",
+            color=0xff6600
+        )
+
+        if shard_key is None:
+            embed.add_field(name="Primal Legendary", value=f"🔸 {user_data[str(self.user_id)].get('primal_legendary', 0)}")
+            embed.add_field(name="Primal Mythical", value=f"🔸 {user_data[str(self.user_id)].get('primal_mythical', 0)}")
+        else:
+            label = "Legendary" if "legendary" in shard_key else "Mythical"
+            emoji = "🟡" if "legendary" in shard_key else "🔴"
+            embed.add_field(name=f"{emoji} Primal {label}", value=f"Current: {user_data[str(self.user_id)].get(shard_key, 0)}")
+
+        await interaction.response.edit_message(embed=embed, view=view)
+
+# This ResetConfirmView you already have, it handles confirming or canceling the reset.
+
+# ----------- RESET ALL SHARDS -----------
+
+@tree.command(name="reset_all_shards", description="Reset all your shard tracking data")
+async def reset_all_shards(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+
+    if user_id not in user_data or not user_data[user_id]:
+        await interaction.response.send_message("❌ You have no data to reset.", ephemeral=True)
+        return
+
+    summary_lines = []
+    for shard, count in user_data[user_id].items():
+        emoji = get_shard_emoji(shard)
+        summary_lines.append(f"{emoji} {shard.replace('_', ' ').title()}: {count}")
+
+    embed = discord.Embed(
+        title="⚠️ Confirm Reset of ALL Data",
+        description="This will delete all your shard tracking data.\n**This cannot be undone.**",
+        color=0xff0000
+    )
+    embed.add_field(name="Current Data", value="\n".join(summary_lines), inline=False)
+    embed.set_footer(text=f"User: {interaction.user.display_name}")
+
+    view = ResetAllConfirmView(user_id, user_data)
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+class ResetAllConfirmView(discord.ui.View):
+    def __init__(self, user_id: str, user_data: dict):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+        self.user_data = user_data
+
+    @discord.ui.button(label="✅ Confirm Reset All", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != self.user_id:
+            await interaction.response.send_message("❌ This is not your reset request.", ephemeral=True)
+            return
+
+        self.user_data[self.user_id] = {}
+        save_data(self.user_data)
+
+        embed = discord.Embed(
+            title="✅ All Data Reset",
+            description="Your mercy tracker has been fully cleared.",
+            color=0x00ff00
+        )
+
+        for item in self.children:
+            item.disabled = True
+
+        await interaction.response.edit_message(embed=embed, view=self)
+        logger.info(f"User {self.user_id} reset all data using /reset_all_shards")
+
+    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if str(interaction.user.id) != self.user_id:
+            await interaction.response.send_message("❌ Not your request.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="❌ Reset Cancelled",
+            description="Your data remains unchanged.",
+            color=0x808080
+        )
+
+        for item in self.children:
+            item.disabled = True
+
+        await interaction.response.edit_message(embed=embed, view=self)
+
+# ----------- STATUS COMMAND -----------
 
 @tree.command(name="status", description="Check your current mercy tracker status")
 async def status(interaction: discord.Interaction):
-    """Display user's mercy tracker status"""
     try:
         user_id = str(interaction.user.id)
         if user_id not in user_data or not user_data[user_id]:
             embed = discord.Embed(
                 title="📊 Mercy Tracker Status",
-                description="No data found. Use `/open` to start tracking your summons!",
+                description="No data found. Use `/open_shard` to start tracking your summons!",
                 color=0xffa500
             )
             await interaction.response.send_message(embed=embed)
             return
-        
+
         status_report = get_status(user_data[user_id])
-        
+
         embed = discord.Embed(
             title="📊 Mercy Tracker Status",
             description=status_report,
@@ -176,84 +432,15 @@ async def status(interaction: discord.Interaction):
             timestamp=datetime.utcnow()
         )
         embed.set_footer(text=f"User: {interaction.user.display_name}")
-        
+
         await interaction.response.send_message(embed=embed)
         logger.info(f"User {interaction.user.id} checked status")
-        
+
     except Exception as e:
         logger.error(f"Error in status command: {e}")
         await interaction.response.send_message("❌ An error occurred while retrieving your status.", ephemeral=True)
 
-@tree.command(name="reset", description="Reset your mercy tracker data")
-@app_commands.describe(shard_type="Type of shard to reset (leave empty to reset all)")
-async def reset(interaction: discord.Interaction, shard_type: str = None):
-    """Reset user's mercy tracker data with confirmation"""
-    try:
-        user_id = str(interaction.user.id)
-        
-        if user_id not in user_data or not user_data[user_id]:
-            await interaction.response.send_message("❌ No data to reset.", ephemeral=True)
-            return
-        
-        # If specific shard type is provided, validate it
-        if shard_type:
-            shard_type_lower = shard_type.lower()
-            if not validate_shard_type(shard_type_lower):
-                valid_types = ", ".join(VALID_SHARD_TYPES)
-                await interaction.response.send_message(
-                    f"❌ Invalid shard type '{shard_type}'. Valid types are: {valid_types}", 
-                    ephemeral=True
-                )
-                return
-            
-            # Check if user has data for this shard type
-            if shard_type_lower not in user_data[user_id]:
-                await interaction.response.send_message(
-                    f"❌ No {shard_type.title()} shard data to reset.", 
-                    ephemeral=True
-                )
-                return
-        
-        # Create confirmation embed
-        if shard_type:
-            emoji = get_shard_emoji(shard_type)
-            embed = discord.Embed(
-                title="⚠️ Confirm Individual Reset",
-                description=f"Are you sure you want to reset your {emoji} **{shard_type.title()}** shard data? This action cannot be undone.",
-                color=0xff6600
-            )
-            current_count = user_data[user_id].get(shard_type.lower(), 0)
-            embed.add_field(
-                name="Current Data",
-                value=f"{emoji} {shard_type.title()}: {current_count}",
-                inline=False
-            )
-        else:
-            embed = discord.Embed(
-                title="⚠️ Confirm Complete Reset",
-                description="Are you sure you want to reset **ALL** your mercy tracker data? This action cannot be undone.",
-                color=0xff6600
-            )
-            # Add current data summary
-            current_data = []
-            for shard, count in user_data[user_id].items():
-                current_data.append(f"{shard.title()}: {count}")
-            
-            if current_data:
-                embed.add_field(
-                    name="Current Data",
-                    value="\n".join(current_data),
-                    inline=False
-                )
-        
-        # Create view with buttons
-        view = ResetConfirmView(user_id, user_data, shard_type)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-        
-    except Exception as e:
-        logger.error(f"Error in reset command: {e}")
-        await interaction.response.send_message("❌ An error occurred while processing reset request.", ephemeral=True)
-
+# ----------- HELP, MERCY_INFO and other commands -----------
 @tree.command(name="mercy_info", description="View mercy system rules and thresholds")
 async def mercy_info(interaction: discord.Interaction):
     """Display mercy system information"""
@@ -344,87 +531,7 @@ async def help_command(interaction: discord.Interaction):
         logger.error(f"Error in help command: {e}")
         await interaction.response.send_message("❌ An error occurred while displaying help.", ephemeral=True)
 
-class ResetConfirmView(discord.ui.View):
-    """View for reset confirmation with buttons"""
-    
-    def __init__(self, user_id: str, user_data: dict, shard_type: str = None):
-        super().__init__(timeout=60.0)
-        self.user_id = user_id
-        self.user_data = user_data
-        self.shard_type = shard_type
-    
-    @discord.ui.button(label="✅ Confirm Reset", style=discord.ButtonStyle.danger)
-    async def confirm_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
-        try:
-            if str(interaction.user.id) != self.user_id:
-                await interaction.response.send_message("❌ You can only reset your own data.", ephemeral=True)
-                return
-            
-            # Perform reset
-            if self.shard_type:
-                # Individual shard reset
-                shard_type_lower = self.shard_type.lower()
-                old_count = self.user_data[self.user_id].get(shard_type_lower, 0)
-                if shard_type_lower in self.user_data[self.user_id]:
-                    del self.user_data[self.user_id][shard_type_lower]
-                
-                embed = discord.Embed(
-                    title="✅ Individual Reset Complete",
-                    description=f"Your **{self.shard_type.title()}** shard data has been reset.\n\nPrevious count: **{old_count}**",
-                    color=0x00ff00
-                )
-                logger.info(f"User {interaction.user.id} reset {self.shard_type} data (was {old_count})")
-            else:
-                # Complete reset
-                self.user_data[self.user_id] = {}
-                embed = discord.Embed(
-                    title="✅ Complete Reset",
-                    description="All your mercy tracker data has been successfully reset.",
-                    color=0x00ff00
-                )
-                logger.info(f"User {interaction.user.id} reset all their data")
-            
-            save_data(self.user_data)
-            
-            # Disable buttons
-            for item in self.children:
-                item.disabled = True
-            
-            await interaction.response.edit_message(embed=embed, view=self)
-            
-        except Exception as e:
-            logger.error(f"Error confirming reset: {e}")
-            await interaction.response.send_message("❌ An error occurred during reset.", ephemeral=True)
-    
-    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.secondary)
-    async def cancel_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
-        try:
-            if str(interaction.user.id) != self.user_id:
-                await interaction.response.send_message("❌ This is not your reset request.", ephemeral=True)
-                return
-            
-            embed = discord.Embed(
-                title="❌ Reset Cancelled",
-                description="Your data remains unchanged.",
-                color=0x808080
-            )
-            
-            # Disable buttons
-            for item in self.children:
-                item.disabled = True
-            
-            await interaction.response.edit_message(embed=embed, view=self)
-            
-        except Exception as e:
-            logger.error(f"Error cancelling reset: {e}")
-            await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
-    
-    async def on_timeout(self):
-        """Handle timeout for reset confirmation"""
-        for item in self.children:
-            item.disabled = True
-
-# Get bot token from environment variable for security
+# Get bot token from environment variable
 bot_token = os.getenv("DISCORD_BOT_TOKEN")
 
 if not bot_token:

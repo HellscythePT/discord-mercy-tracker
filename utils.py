@@ -8,9 +8,9 @@ from config import (
     PROGRESS_FILLED_CHAR
 )
 
-def validate_amount(amount):
-    """Validate if the amount is within acceptable range"""
-    return isinstance(amount, int) and MIN_AMOUNT_PER_COMMAND <= amount <= MAX_AMOUNT_PER_COMMAND
+# Valida quantidade, entre 1 e MAX_AMOUNT_PER_COMMAND (500)
+def validate_amount(amount: int, max_amount: int = 500) -> bool:
+    return 1 <= amount <= max_amount <= MAX_AMOUNT_PER_COMMAND
 
 def format_progress_bar(progress, length=None):
     """Create a visual progress bar"""
@@ -77,6 +77,15 @@ def format_time_ago(timestamp):
         days = int(seconds // 86400)
         return f"{days} day{'s' if days != 1 else ''} ago"
 
+# Valida se o shard_type é válido (inclui os específicos como primal_legendary)
+def validate_shard_type(shard_type: str) -> bool:
+    # Permitimos também subtipos para primal legendário e mythical
+    if shard_type in VALID_SHARD_TYPES:
+        return True
+    if shard_type in ("primal_legendary", "primal_mythical"):
+        return True
+    return False
+
 def get_rarity_emoji(rarity):
     """Get emoji for different rarities"""
     rarity_emojis = {
@@ -96,6 +105,8 @@ def get_shard_emoji(shard_type):
         "void": "🟣",
         "sacred": "🟡",
         "primal": "🔴",
+        "primal_legendary": "⭐",
+        "primal_mythical": "🌟",
         "remnant": "⚫"
     }
     return shard_emojis.get(shard_type.lower(), "🔘")
