@@ -102,13 +102,13 @@ def get_rarity_emoji(rarity):
 def get_shard_emoji(shard_type):
     """Get emoji for different shard types"""
     shard_emojis = {
-        "ancient": "🔵",
-        "void": "🟣",
-        "sacred": "🟡",
-        "primal": "🔴",
-        "primal_legendary": "⭐",
-        "primal_mythical": "🌟",
-        "remnant": "⚫"
+        "ancient": "<:ancientshard:1102264358886711439>",
+        "void": "<:voidshard:1102264251910987886>",
+        "sacred": "<:sacredshard:1102264154636701758>",
+        "primal": "<:primalshard:1165617400851476570>",
+        "primal_legendary": "<:goldstar:1400625240366911591>",
+        "primal_mythical": "<:redstar:1400625171542446230>",
+        "remnant": "<:remnant:1400625036645240842>"
     }
     return shard_emojis.get(shard_type.lower(), "🔘")
 
