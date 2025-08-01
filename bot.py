@@ -1,3 +1,4 @@
+import os
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -10,9 +11,9 @@ keep_alive()
 import discord
 from discord.ext import commands
 from discord import app_commands
+
 import json
 import logging
-import os
 from datetime import datetime
 from mercy_tracker import update_tracker, get_status, get_mercy_rules_info, validate_shard_type
 from backup_manager import backup_data, restore_data
@@ -525,9 +526,8 @@ async def help_command(interaction: discord.Interaction):
         tips = [
             "• Your data is automatically saved and backed up",
             "• Use `/mercy_info` to see detailed mercy rules",
-            "• Maximum 1000 shards can be logged per command",
-            "• Use `/reset ancient` to reset only Ancient shards",
-            "• Use `/reset` (no shard type) to reset all data",
+            "• Maximum 500 shards can be logged per command",
+            "• Use `/reset` to prompt for a reset menu",
             "• All commands work only for you (your data is private)"
         ]
         

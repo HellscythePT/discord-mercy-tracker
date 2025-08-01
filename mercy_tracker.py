@@ -36,30 +36,66 @@ def get_status(data):
     """Generate a formatted status report for the user's mercy progress"""
     mercy_rules = get_mercy_rules()
     lines = []
-    
+
+    # Handle Primal output specially
+    primal_legendary = data.get("primal_legendary", 0)
+    primal_mythical = data.get("primal_mythical", 0)
+    if primal_legendary > 0 or primal_mythical > 0:
+        total_primal = max(primal_legendary, primal_mythical)
+        lines.append(f"\n**Primal Shards** ({total_primal} total)")
+        # Legendary
+        rule = mercy_rules["primal"]["legendary"]
+        start_mercy = rule["start"]
+        rate_increase = rule["rate"]
+        progress = primal_legendary / start_mercy if start_mercy else 0
+        progress_bar = format_progress_bar(progress, 10)
+        percent = int(progress * 100)
+        if primal_legendary < start_mercy:
+            remaining = start_mercy - primal_legendary
+            lines.append(f"└ Legendary: {remaining} to mercy {progress_bar} {percent}% ({primal_legendary}/{start_mercy})")
+        else:
+            extra = primal_legendary - start_mercy
+            chance_increase = extra * rate_increase
+            lines.append(f"└ Legendary: **MERCY ACTIVE** (+{chance_increase}% chance)")
+        # Mythical
+        rule = mercy_rules["primal"]["mythical"]
+        start_mercy = rule["start"]
+        rate_increase = rule["rate"]
+        progress = primal_mythical / start_mercy if start_mercy else 0
+        progress_bar = format_progress_bar(progress, 10)
+        percent = int(progress * 100)
+        if primal_mythical < start_mercy:
+            remaining = start_mercy - primal_mythical
+            lines.append(f"└ Mythical: {remaining} to mercy {progress_bar} {percent}% ({primal_mythical}/{start_mercy})")
+        else:
+            extra = primal_mythical - start_mercy
+            chance_increase = extra * rate_increase
+            lines.append(f"└ Mythical: **MERCY ACTIVE** (+{chance_increase}% chance)")
+
+    # Show all other shards
     for shard_type, count in data.items():
+        if shard_type in ("primal_legendary", "primal_mythical"):
+            continue
         if shard_type not in mercy_rules:
             continue
-            
         lines.append(f"\n**{shard_type.title()} Shards** ({count} total)")
-        
         for rarity, rule in mercy_rules[shard_type].items():
             start_mercy = rule["start"]
             rate_increase = rule["rate"]
-            
+            progress = count / start_mercy if start_mercy else 0
+            progress_bar = format_progress_bar(progress, 10)
+            percent = int(progress * 100)
             if count < start_mercy:
                 remaining = start_mercy - count
-                progress = count / start_mercy
-                progress_bar = format_progress_bar(progress, 10)
-                lines.append(f"└ {rarity.title()}: {remaining} to mercy {progress_bar} ({count}/{start_mercy})")
+                lines.append(f"└ {rarity.title()}: {remaining} to mercy {progress_bar} {percent}% ({count}/{start_mercy})")
             else:
                 extra = count - start_mercy
                 chance_increase = extra * rate_increase
                 lines.append(f"└ {rarity.title()}: **MERCY ACTIVE** (+{chance_increase}% chance)")
-    
+
     if not lines:
         return "No mercy data tracked yet. Use `/open` to start tracking!"
-    
+
     return "\n".join(lines)
 
 def get_mercy_rules_info():
@@ -88,37 +124,95 @@ def get_detailed_status(data):
     """Get detailed status with percentages and progress"""
     mercy_rules = get_mercy_rules()
     detailed_info = {}
-    
+
+    # Handle Primal Legendary
+    primal_legendary = data.get("primal_legendary", 0)
+    if primal_legendary > 0:
+        rule = mercy_rules["primal"]["legendary"]
+        start_mercy = rule["start"]
+        rate_increase = rule["rate"]
+        if primal_legendary < start_mercy:
+            remaining = start_mercy - primal_legendary
+            progress_percent = (primal_legendary / start_mercy) * 100
+            chance_increase = 0
+            active = False
+        else:
+            remaining = 0
+            progress_percent = 100
+            chance_increase = (primal_legendary - start_mercy) * rate_increase
+            active = True
+        detailed_info["primal_legendary"] = {
+            "count": primal_legendary,
+            "mercy_status": {
+                "legendary": {
+                    "active": active,
+                    "remaining": remaining,
+                    "progress_percent": progress_percent,
+                    "chance_increase": chance_increase
+                }
+            }
+        }
+
+    # Handle Primal Mythical
+    primal_mythical = data.get("primal_mythical", 0)
+    if primal_mythical > 0:
+        rule = mercy_rules["primal"]["mythical"]
+        start_mercy = rule["start"]
+        rate_increase = rule["rate"]
+        if primal_mythical < start_mercy:
+            remaining = start_mercy - primal_mythical
+            progress_percent = (primal_mythical / start_mercy) * 100
+            chance_increase = 0
+            active = False
+        else:
+            remaining = 0
+            progress_percent = 100
+            chance_increase = (primal_mythical - start_mercy) * rate_increase
+            active = True
+        detailed_info["primal_mythical"] = {
+            "count": primal_mythical,
+            "mercy_status": {
+                "mythical": {
+                    "active": active,
+                    "remaining": remaining,
+                    "progress_percent": progress_percent,
+                    "chance_increase": chance_increase
+                }
+            }
+        }
+
+    # Handle all other shards
     for shard_type, count in data.items():
+        if shard_type in ("primal_legendary", "primal_mythical"):
+            continue
         if shard_type not in mercy_rules:
             continue
-            
+
         detailed_info[shard_type] = {
             "count": count,
             "mercy_status": {}
         }
-        
+
         for rarity, rule in mercy_rules[shard_type].items():
             start_mercy = rule["start"]
             rate_increase = rule["rate"]
-            
+
             if count < start_mercy:
                 remaining = start_mercy - count
                 progress_percent = (count / start_mercy) * 100
-                detailed_info[shard_type]["mercy_status"][rarity] = {
-                    "active": False,
-                    "remaining": remaining,
-                    "progress_percent": progress_percent,
-                    "chance_increase": 0
-                }
+                chance_increase = 0
+                active = False
             else:
-                extra = count - start_mercy
-                chance_increase = extra * rate_increase
-                detailed_info[shard_type]["mercy_status"][rarity] = {
-                    "active": True,
-                    "remaining": 0,
-                    "progress_percent": 100,
-                    "chance_increase": chance_increase
-                }
-    
+                remaining = 0
+                progress_percent = 100
+                chance_increase = (count - start_mercy) * rate_increase
+                active = True
+
+            detailed_info[shard_type]["mercy_status"][rarity] = {
+                "active": active,
+                "remaining": remaining,
+                "progress_percent": progress_percent,
+                "chance_increase": chance_increase
+            }
+
     return detailed_info
