@@ -132,8 +132,7 @@ class ShardSelectFirstView(discord.ui.View):
             await interaction.response.send_message("❌ This isn't your selection.", ephemeral=True)
             return
         await interaction.response.send_message(
-            f"Please enter the amount of {shard_type.title()} shards you opened (1-{MAX_AMOUNT_PER_COMMAND}):",
-            ephemeral=True
+            f"{interaction.user.mention}, please enter the amount of {shard_type.title()} shards you opened (1-{MAX_AMOUNT_PER_COMMAND}):"
         )
 
         def check(m):
@@ -202,8 +201,7 @@ class PrimalRarityAmountView(discord.ui.View):
             label = key.replace("primal_", "").title()
 
         await interaction.response.send_message(
-            f"Please enter the amount of {label} shards you opened (1-{MAX_AMOUNT_PER_COMMAND}):",
-            ephemeral=True
+            f"{interaction.user.mention}, please enter the amount of {label} shards you opened (1-{MAX_AMOUNT_PER_COMMAND}):"
         )
 
         def check(m):
