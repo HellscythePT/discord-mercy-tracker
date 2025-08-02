@@ -9,18 +9,17 @@ from keep_alive import keep_alive
 keep_alive()
 
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord import app_commands
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from mercy_tracker import update_tracker, get_status, get_mercy_rules_info, validate_shard_type
 from backup_manager import backup_data, restore_data
 from utils import format_progress_bar, validate_amount, get_shard_emoji
 from config import VALID_SHARD_TYPES, MAX_AMOUNT_PER_COMMAND
 
-# ---------------------------- MERCY TRACKER BOT CODE ----------------------------
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -545,128 +544,6 @@ async def help_command(interaction: discord.Interaction):
     except Exception as e:
         logger.error(f"Error in help command: {e}")
         await interaction.response.send_message("❌ An error occurred while displaying help.", ephemeral=True)
-# ----------- END OF MERCY TRACKER BOT CODE ------------
-
-# ----------- REMINDER BOT CODE -----------
-RESET_DATA_FILE = "reset_data.json"
-REMINDER_CHANNEL_NAME = "┣⏰reminder"
-PING_ROLE_NAME = "ping"
-PING_NOTE = "*Want to be notified?* https://discord.com/channels/955147647130431558/1124639072573456454/1128683162994741298"
-
-REMINDER_TIMES = {
-    "Doom Tower": timedelta(hours=48),
-    "Cursed City": timedelta(hours=48),
-    "Clan Quests": timedelta(hours=12),
-    "Clan vs Clan": timedelta(hours=12),
-    "Hydra": timedelta(hours=12),
-    "Chimera": timedelta(hours=12),
-    "Siege": timedelta(hours=24)
-}
-
-FIXED_WEEKLY = {
-    "Clan Quests": {"weekday": 0, "hour": 8},
-    "Hydra": {"weekday": 2, "hour": 10},
-    "Chimera": {"weekday": 3, "hour": 11}
-}
-
-ROTATING_EVENTS = {
-    "Doom Tower": 30,
-    "Cursed City": 30,
-    "Siege": 14,
-    "Clan vs Clan": 14
-}
-
-sent_reminders = {}
-
-def load_reset_data():
-    if os.path.exists(RESET_DATA_FILE):
-        with open(RESET_DATA_FILE, 'r') as f:
-            return json.load(f)
-    now = datetime.utcnow()
-    data = {
-        "Doom Tower": int((now + timedelta(days=11)).timestamp()),
-        "Cursed City": int((now + timedelta(days=1, hours=2)).timestamp()),
-        "Siege": int(datetime(2025, 8, 5, 12, 0).timestamp()),
-        "Clan vs Clan": int(datetime(2025, 8, 12, 9, 0).timestamp())
-    }
-    save_reset_data(data)
-    return data
-
-def save_reset_data(data):
-    with open(RESET_DATA_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
-
-reset_data = load_reset_data()
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
-tree = bot.tree
-
-@tasks.loop(minutes=1)
-async def reminder_loop():
-    now = datetime.utcnow()
-    if not bot.guilds:
-        return
-    guild = bot.guilds[0]
-    channel = discord.utils.get(guild.text_channels, name=REMINDER_CHANNEL_NAME)
-    role = discord.utils.get(guild.roles, name=PING_ROLE_NAME)
-    if not channel or not role:
-        return
-
-    for event, advance_time in REMINDER_TIMES.items():
-        if event in FIXED_WEEKLY:
-            day = FIXED_WEEKLY[event]["weekday"]
-            hour = FIXED_WEEKLY[event]["hour"]
-            today = now.date()
-            days_ahead = (day - today.weekday()) % 7
-            reset_dt = datetime.combine(today + timedelta(days=days_ahead), datetime.min.time()) + timedelta(hours=hour)
-            if now > reset_dt:
-                reset_dt += timedelta(weeks=1)
-        else:
-            try:
-                reset_ts = reset_data[event]
-                reset_dt = datetime.utcfromtimestamp(reset_ts)
-            except (KeyError, ValueError):
-                continue
-
-        reminder_time = reset_dt - advance_time
-        key = f"{event}:{reset_dt.isoformat()}"
-
-        if reminder_time <= now < reminder_time + timedelta(minutes=1):
-            if key not in sent_reminders:
-                await channel.send(f"<@&{role.id}> **{event}** reset is coming soon!\n{PING_NOTE}")
-                sent_reminders[key] = now.timestamp()
-
-        if event in ROTATING_EVENTS and now > reset_dt:
-            next_dt = reset_dt + timedelta(days=ROTATING_EVENTS[event])
-            reset_data[event] = int(next_dt.timestamp())
-            save_reset_data(reset_data)
-
-    # Cleanup old reminders older than 3 days
-    expiration = now.timestamp() - 3 * 86400
-    sent_reminders_keys = list(sent_reminders.keys())
-    for key in sent_reminders_keys:
-        if sent_reminders[key] < expiration:
-            del sent_reminders[key]
-
-@bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user}")
-    logger.info(f"Bot {bot.user} is ready")
-    try:
-        synced = await tree.sync()
-        print(f"Synced {len(synced)} commands.")
-    except Exception as e:
-        print(f"Failed to sync commands: {e}")
-        logger.error(f"Failed to sync commands: {e}")
-    if not reminder_loop.is_running():
-        reminder_loop.start()
-
-# ----------- END OF REMINDER BOT CODE
 
 # ----------- HEALTH CHECK COMMAND -----------#
 @tree.command(name="health", description="Check if the bot is running")
